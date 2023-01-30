@@ -1,0 +1,195 @@
+---
+title: "Intro to Spatial Data in R"
+author: "Gaby Sanchez Ortiz"
+date: "2023-01-25"
+output: html_document
+---
+
+## Set up
+
+```{r setup, include=FALSE}
+source("setup.R")
+```
+
+## Vector data
+
+Using tigris to work with polygons and lines
+
+```{r polygons and lines}
+# Downloading county boundary shapefile for CO
+counties <- counties(state = "CO")
+
+# Importing roads shapefile of Larimer county
+roads <- roads(state = "CO", county = "Larimer")
+```
+
+Using tmap to create quick static and interactive maps
+
+```{r mode and maps}
+# View mode is make interactive plots
+# Any plots created after the tmap_mode command, will be in the selected mode
+tmap_mode("view")
+
+# Making quick thematic maps (qtm) 
+qtm(counties) +
+  qtm(roads)
+
+# Selecting the type of spatial layer using tm_shape()
+tm_shape(counties) +
+  tm_polygons() 
+tm_shape(roads) +
+  tm_lines()
+```
+
+Using sf (simple features) which represents spatial datas as a data.frame or tibble with a geometry column
+
+```{r selecting Poudre Canyon Hwy}
+# Filtering roads data for just Poudre Canyon Highway
+roads %>%
+  filter(FULLNAME == "Poudre Canyon Hwy") -> poudre_hwy
+```
+
+When working with spatial data, you start with some sort of excel or cvs file that is not in sf format, so you have to transform it.
+
+```{r converting dataframes to sf}
+# Creating a dataframe with points along the Poudre highway
+poudre_points <- data.frame(name = c("Mishawaka", "Rustic", "Blue Lake Trailhead"),
+                            long = c(-105.35634, -105.58159, -105.85563),
+                            lat = c(40.68752, 40.69687, 40.57960))
+
+# Convert the dataframe to sf format 
+# a few notes: crs is coordinate reference system; also, x (long) goes first, y (lat) goes second
+poudre_points_sf <- st_as_sf(poudre_points, coords = c("long", "lat"), crs = 4326)
+
+qtm(poudre_hwy) +
+  qtm(poudre_points_sf)
+```
+
+Working with spatial data requires a coordinate reference system. There are various ways to extract crs.
+
+```{r crs}
+# looking for crs in the metadata
+counties # when we run we can see the geodetic crs is NAD83
+
+# we can also use st_crs() to get more detailed information  
+st_crs(counties)
+
+# Checking to see if two objects have the same crs
+st_crs(counties) == st_crs(poudre_points_sf) # they're not, so outcome is FALSE
+
+# If they're not, you can re-project one based on the other's crs
+poudre_points_prj <- st_transform(poudre_points_sf, st_crs(counties))
+
+# The outcome should be TRUE now
+st_crs(poudre_points_prj) == st_crs(counties)
+```
+
+## Raster data
+
+Using elevatr to work with elevation data
+
+```{r elevatr}
+# get_elev_raster() needs spatial object to get the extent of elevation data (boundary basically) and the zoom level which is just the resolution
+elevation <- get_elev_raster(counties, z = 7)
+
+qtm(elevation) # gives default categorical symbology
+
+# to change to continuous symbology
+tm_shape(elevation) +
+  tm_raster(style = "cont", title = "Elevation (m)")
+
+# printing object gives detailed information about resolution, extent, crs, and file name
+elevation
+```
+
+Working with raster data using terra
+
+```{r terra}
+# elevation raster has to be in proper format for terra (which is not done with elevatr) 
+
+# convert RasterLayer object to terra SpatRaster object using rast()
+elevation <- rast(elevation)
+
+# changing the name
+names(elevation) <- "Elevation"
+
+# using crop() function to crop the raster to roads shapefile (Larimer county) and ext() function to get just the extent of the Poudre hwy
+elevation_crop <- crop(elevation, ext(roads))
+
+tm_shape(elevation_crop) +
+  tm_raster(style = "cont")
+
+# Creates a final map with all spatial data
+tm_shape(elevation, bbox = st_bbox(poudre_hwy)) +
+  tm_raster(style = "cont", title = "Elevation (m)") +
+tm_shape(poudre_hwy) +
+  tm_lines() +
+tm_shape(poudre_points_prj) +
+  tm_dots(size = 0.2)
+```
+
+## Reading and Writing Spatial Data
+
+Writing spatial data
+
+```{r writing}
+# save vector data
+write_sf(poudre_hwy, "data/poudre_hwy.shp")
+
+write_sf(poudre_points_prj, "data/poudre_points.shp")
+
+# save raster data
+writeRaster(elevation_crop, "data/elevation_larimer.tif")
+
+# saving variables as .RData files
+save(poudre_hwy, poudre_points_prj, file = "data/spatial_object.RData")
+
+# removing giles from environment
+rm(poudre_hwy, poudre_points_prj)
+
+# loading it back in
+load("data/spatial_object.RData")
+```
+
+Reading spatial data
+
+```{r reading}
+# read shapefiles
+read_sf("data/poudre_hwy.shp")
+
+# read rasters
+rast("data/elevation_larimer.tif")
+```
+
+## Exercises
+
+1.  Filter out the counties data set to only include Larimer, Denver, and Pueblo counties.
+
+```{r filter counties}
+counties %>%
+  filter(NAME == "Larimer" | NAME == "Denver" | NAME == "Pueblo") -> three_counties
+```
+
+2.  Make a map of the counties data colored by county area. Make a second map of counties colored by their total area of water.
+
+```{r maps}
+# map of counties data colored by county area
+qtm(counties)
+
+tm_shape(counties) +
+  tm_polygons(col = "ALAND")
+
+# map of counties data colored by area of water
+tm_shape(counties) +
+  tm_polygons(col = "AWATER")
+```
+
+3.  Make a bar plot comparing the elevation of your 3 points in the Poudre Canyon.
+
+```{r barplot}
+
+```
+
+4.  Why are there 4 features in our Poudre Canyon Highway variable instead of 1.
+
+Because the highway is cut into separate lines that are in slightly different places spatially.

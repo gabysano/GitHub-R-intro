@@ -1,0 +1,252 @@
+---
+title: "Intro to R and R Markdown"
+author: "Gaby Sanchez Ortiz"
+date: "2023-01-20"
+output: html_document
+---
+
+## Set up
+
+Calls back to the script where we installed and read in libraries
+
+```{r}
+source("setup.R")
+data("penguins")
+```
+
+## Exploring data types
+
+Looking at class() and str() functions
+
+```{r, datatypes}
+class(penguins)
+str(penguins)
+
+class(penguins$species)
+str(penguins$species)
+```
+
+## Creating Lists
+
+```{r}
+myList <- list("apple", 1993, FALSE, penguins)
+str(myList)
+
+# Nesting lists
+list(myList, list("more stuff here", list("and more")))
+
+#Using names() 
+names(myList) <- c("fruit", "year", "logic", "data")
+names(myList)
+```
+
+## Indexing
+
+```{r}
+# use double brackets for lists
+myList[[1]]
+
+myList[["data"]]
+
+# for vectors use single brackets
+myVector <- c("apple", "banana", "pear")
+myVector[2]
+
+# Index data frames
+# dataframe[row(s), columns()]
+penguins[1:5, 2]
+
+penguins[1:5, "island"]
+
+penguins[1, 1:5]
+
+penguins[1:5, c("species", "sex")]
+
+penguins[penguins$sex=='female',]
+
+# $ for a single column
+penguins$species
+
+```
+
+## Indexing Exercises
+
+1.  Why don't the following lines of codes work? Tweak each one so the code runs.
+
+```{r}
+# original was myList["Fruit]
+# to correct, you need to add double brackets and keep the name as you originally wrote it
+myList[["fruit"]]
+
+# original was penguins$flipper_lenght_mm
+# to correct you need to make sure you are spelling the column names correctly
+penguins$flipper_length_mm
+
+# original was penguins[island=='Dream',]
+# to correct you need to specify that the column you are looking at is in the penguins dataframe
+penguins[penguins$island=='Dream',]
+```
+
+2.  How many species are in the penguins dataset? What islands were collected for?
+
+```{r}
+# Number of species in penguins dataset
+numSpecies <- unique(penguins$species)
+length(numSpecies)
+
+# Individual islands collected for
+unique(penguins$island)
+```
+
+3.  Use indexing to create a new dataframe that has only 3 columns: species, island, flipper length, and subset all rows for just the 'Dream' island.
+
+```{r}
+# Indexing for just three columns and just the Dream island
+penguins[penguins$island=='Dream', c("species", "island", "flipper_length_mm")]
+```
+
+4.  Use indexing and the mean() function to find the average flipper length for the Adelie species on Dream island.
+
+```{r}
+# Filters penguins df to only include all of the rows of Adelie penguins in Dream island
+AdelieDream <-penguins[penguins$species=="Adelie" & penguins$island=="Dream",]
+
+# Takes the average of their flipper length but does not take into account the rows with NA
+mean(AdelieDream$flipper_length_mm, na.rm=TRUE)
+```
+
+## Exploring the dplyr package
+
+Subset rows with filter()
+
+```{r}
+filter(penguins, species == "Adelie")
+
+filter(penguins, species != "Adelie")
+
+filter(penguins, island %in% c("Dream", "Torgersen") & !is.na(bill_length_mm))
+```
+
+Select columns with select()
+
+```{r}
+# Select two specific variables
+select(penguins, species, sex)
+
+# Select a range of variables
+select(penguins, species:flipper_length_mm)
+
+# Rename columns within select
+select(penguins, genus = species, island)
+
+# Select column variables that are recorded in mm
+select(penguins, contains("mm"))
+```
+
+Create new variables with mutate()
+
+```{r}
+# New variable that calculates bill length in cm
+mutate(penguins, bill_length_cm = bill_length_mm/10)
+
+# mutate based on conditional statements
+mutate(penguins, species_sex = if_else(sex == 'male', paste0(species,"_m"), paste0(species, "_f")))
+```
+
+## Pipe %\>% Exercises
+
+1.  Reorder the variables in penguins so that year is the first column followed by the rest
+
+```{r}
+penguins %>%
+  select(year, everything())
+```
+
+2.  Create a new column called 'size_group' where individuals with body mass greater than the overall average are called 'large' and those smaller are called 'small'
+
+```{r}
+penguins %>%
+  mutate(size_group = if_else(body_mass_g > mean(body_mass_g, na.rm = T), paste0('large'), paste0('small')))
+```
+
+3.  Find out which year for each species were individuals on average the largest according to body mass.
+
+```{r}
+penguins %>%
+  group_by(species,year) %>%
+  summarise(year_largest_avg = mean(body_mass_g, na.rm = T))
+# would i need to group and resummarise?
+```
+
+4.  You want to filter data for years that are NOT in a vector of given years, but this code doesn't work. Tweak it so that it does.
+
+```{r}
+# original was:
+# penguins %>%
+#   filter(year !%in% c(2008, 2009))
+
+penguins %>%
+  filter(!year %in% c(2008, 2009))
+```
+
+## Visualize
+
+Exploring histograms
+
+```{r}
+ggplot(penguins) +
+  geom_histogram(mapping = aes(x = flipper_length_mm))
+
+# flipper length by species
+ggplot(penguins) +
+  geom_histogram(aes(x = flipper_length_mm, fill = species), alpha = 0.5, position = "identity") +
+  scale_fill_manual(values = c("darkorange","darkorchid","cyan4"))
+
+# same example as previous, but in different plots
+ggplot(penguins) +
+  geom_histogram(aes(x = flipper_length_mm, fill = species), alpha = 0.5, position = "identity") +
+  scale_fill_manual(values = c("darkorange","darkorchid","cyan4")) +
+  facet_wrap(~species)
+```
+
+Bar plots
+
+```{r}
+ggplot(penguins) +
+  geom_bar(mapping = aes(x = island, fill = species))
+
+# Creating different bar plots for every species and plotting by island
+
+ggplot(penguins, aes(x = island, fill = species)) +
+  geom_bar(alpha = 0.8) +
+  scale_fill_manual(values = c("darkorange","purple","cyan4"), 
+                    guide = FALSE) +
+  theme_minimal() +
+  facet_wrap(~species, ncol = 1) +
+  coord_flip()
+```
+
+Scatter plots
+
+```{r}
+ggplot(penguins) +
+  geom_point(mapping = aes(x = body_mass_g, y = flipper_length_mm, color = species))
+```
+
+## Visualization Exercises
+
+1.  Make a bar plot showing the average flipper length for each species.
+
+```{r}
+ggplot(penguins) +
+  geom_bar(mapping = aes(x = mean(flipper_length_mm, na.rm = T), fill = species))
+```
+
+2.  Make a scatter plot of bill length compared to bill depth but only for observations on Dream island.
+
+```{r}
+penguins %>%
+  filter(island == 'Dream') %>%
+  ggplot() +
+    geom_point(mapping = aes(x = bill_length_mm, y = bill_depth_mm))
+```
